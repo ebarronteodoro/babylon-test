@@ -8,6 +8,9 @@ import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader'
 import { HDRCubeTexture } from '@babylonjs/core/Materials/Textures/hdrCubeTexture'
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
+
+// Importar el LoadingScreen para efectos secundarios necesarios
+import '@babylonjs/core/Loading/loadingScreen'
 import '@babylonjs/loaders/glTF'
 
 import ZoomInIcon from './icons/ZoomInIcon'

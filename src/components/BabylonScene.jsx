@@ -9,7 +9,6 @@ import { HDRCubeTexture } from '@babylonjs/core/Materials/Textures/hdrCubeTextur
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
 
-// Importar el LoadingScreen para efectos secundarios necesarios
 import '@babylonjs/core/Loading/loadingScreen'
 import '@babylonjs/loaders/glTF'
 
@@ -23,18 +22,20 @@ const BabylonScene = ({ modelPath }) => {
   const canvasRef = useRef(null)
   const cameraRef = useRef(null)
   const angleRef = useRef(Math.PI / 4)
-  const radiusRef = useRef(10)
-  const targetRadius = useRef(radiusRef.current + 20)
+  const radiusRef = useRef(100)
+  const targetRadius = useRef(radiusRef.current)
   const minRadius = 50
   const maxRadius = 150
   const targetAngle = useRef(angleRef.current)
-  const lerpSpeed = 0.03
+  const lerpSpeed = 0.05
 
   const [isDragging, setIsDragging] = useState(false)
   const [lastMouseX, setLastMouseX] = useState(0)
-  const [loading, setLoading] = useState(true) // Estado de carga
-  const [isButtonEnabled, setIsButtonEnabled] = useState(false) // Habilitar botón después de la carga
+  const [lastTouchX, setLastTouchX] = useState(0) // Para manejo táctil
+  const [loading, setLoading] = useState(true)
+  const [isButtonEnabled, setIsButtonEnabled] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
+  const [loaderClass, setLoaderClass] = useState('loader2')
 
   const center = Vector3.Zero()
 
@@ -42,28 +43,25 @@ const BabylonScene = ({ modelPath }) => {
     const canvas = canvasRef.current
     const engine = new Engine(canvas, true)
 
-    // Crear la escena
     const scene = new Scene(engine)
     scene.clearColor = new Vector3(0, 0, 0)
 
-    // Crear la cámara UniversalCamera
     const camera = new UniversalCamera(
       'camera',
-      new Vector3(0, 3, -radiusRef.current),
+      new Vector3(0, 22, -radiusRef.current),
       scene
     )
     camera.setTarget(center)
+    camera.inputs.clear()
     cameraRef.current = camera
 
-    // Crear luz hemisférica
     const hemiLight = new HemisphericLight(
       'hemiLight',
       new Vector3(1, 1, 0),
       scene
     )
-    hemiLight.intensity = 0.5
+    hemiLight.intensity = 1.5
 
-    // Crear Skybox
     const skybox = MeshBuilder.CreateBox('skyBox', { size: 1000 }, scene)
     const skyboxMaterial = new StandardMaterial('skyBoxMaterial', scene)
     const hdrTexture = new HDRCubeTexture('/hdri/sky2.hdr', scene, 512)
@@ -73,7 +71,6 @@ const BabylonScene = ({ modelPath }) => {
     skyboxMaterial.disableLighting = true
     skybox.material = skyboxMaterial
 
-    // Cargar el modelo GLB y cambiar el estado de carga cuando termine
     try {
       SceneLoader.Append(
         '',
@@ -85,8 +82,8 @@ const BabylonScene = ({ modelPath }) => {
             mesh.receiveShadows = true
           })
           scene.executeWhenReady(() => {
-            setStatusMessage('Modelo cargado') // Cambia el mensaje de estado
-            setIsButtonEnabled(true) // Habilitar el botón
+            setStatusMessage('Modelo cargado')
+            setIsButtonEnabled(true)
           })
         },
         null,
@@ -98,22 +95,10 @@ const BabylonScene = ({ modelPath }) => {
       console.error('Error en el callback de SceneLoader.Append:', error)
     }
 
-    // Manejar eventos de arrastre en la escena
-    scene.onPointerDown = (evt, pickInfo) => {
-      if (pickInfo.hit) {
-        handlePointerDown(evt)
-      }
-    }
+    scene.detachControl()
 
-    scene.onPointerUp = evt => {
-      handlePointerUp(evt)
-    }
+    updateCameraPosition()
 
-    scene.onPointerMove = evt => {
-      handlePointerMove(evt)
-    }
-
-    // Render loop
     engine.runRenderLoop(() => {
       angleRef.current += (targetAngle.current - angleRef.current) * lerpSpeed
       radiusRef.current +=
@@ -126,17 +111,47 @@ const BabylonScene = ({ modelPath }) => {
       engine.resize()
     })
 
+    // Añadir eventos de mouse y touch
+    canvas.addEventListener('mousedown', handlePointerDown)
+    canvas.addEventListener('wheel', handleMouseWheel, { passive: false })
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
+    canvas.addEventListener('touchend', handleTouchEnd)
+
     return () => {
       engine.dispose()
+      canvas.removeEventListener('mousedown', handlePointerDown)
+      canvas.removeEventListener('wheel', handleMouseWheel)
+      canvas.removeEventListener('touchstart', handleTouchStart)
+      canvas.removeEventListener('touchmove', handleTouchMove)
+      canvas.removeEventListener('touchend', handleTouchEnd)
     }
   }, [modelPath])
+
+  useEffect(() => {
+    const handleMouseMove = event => {
+      if (isDragging) {
+        const deltaX = event.clientX - lastMouseX
+        const sensitivity = 0.003
+        const rotationAmount = deltaX * sensitivity
+        targetAngle.current += rotationAmount
+        setLastMouseX(event.clientX)
+      }
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+    }
+  }, [isDragging, lastMouseX])
 
   const updateCameraPosition = () => {
     const newAngle = angleRef.current
     const newRadius = radiusRef.current
     const x = newRadius * Math.sin(newAngle)
     const z = newRadius * Math.cos(newAngle)
-    cameraRef.current.position = new Vector3(x, 22, z)
+    cameraRef.current.position = new Vector3(x, 30, z)
     cameraRef.current.setTarget(center)
   }
 
@@ -160,37 +175,85 @@ const BabylonScene = ({ modelPath }) => {
     }
   }
 
-  // Manejar el inicio del arrastre
+  // Control de arrastre para dispositivos de escritorio
   const handlePointerDown = e => {
     e.preventDefault()
     setIsDragging(true)
     setLastMouseX(e.clientX)
+
+    document.addEventListener('mousemove', handlePointerMove)
+    document.addEventListener('mouseup', handlePointerUp)
   }
 
-  // Manejar el fin del arrastre
   const handlePointerUp = e => {
     e.preventDefault()
     setIsDragging(false)
+
+    document.removeEventListener('mousemove', handlePointerMove)
+    document.removeEventListener('mouseup', handlePointerUp)
   }
 
-  // Manejar el movimiento del mouse
   const handlePointerMove = e => {
     if (isDragging) {
       const deltaX = e.clientX - lastMouseX
-      const sensitivity = 0.005
-      targetAngle.current += deltaX * sensitivity
+      const sensitivity = 0.003
+      const rotationAmount = deltaX * sensitivity
+      targetAngle.current += rotationAmount
       setLastMouseX(e.clientX)
     }
   }
 
+  // Control de zoom con la rueda del mouse
+  const handleMouseWheel = e => {
+    e.preventDefault()
+    if (e.deltaY < 0) {
+      zoomIn()
+    } else {
+      zoomOut()
+    }
+  }
+
+  // Eventos táctiles para dispositivos móviles (drag y zoom)
+  const handleTouchStart = e => {
+    if (e.touches.length === 1) {
+      // Control del arrastre con un dedo
+      console.log('Touch start detected')
+      e.preventDefault()
+      setIsDragging(true)
+      setLastTouchX(e.touches[0].clientX) // Guardamos la posición inicial del toque
+    }
+  }
+
+  const handleTouchMove = e => {
+    if (e.touches.length === 1 && isDragging) {
+      // Arrastre con un dedo
+      console.log('Touch move detected')
+      e.preventDefault()
+      const deltaX = e.touches[0].clientX - lastTouchX
+      const sensitivity = 0.003
+      const rotationAmount = deltaX * sensitivity
+      targetAngle.current += rotationAmount
+      setLastTouchX(e.touches[0].clientX)
+    }
+  }
+
+  const handleTouchEnd = e => {
+    console.log('Touch end detected')
+    setIsDragging(false)
+  }
+
   const handleLoaderButtonClick = () => {
-    setLoading(false) // Ocultar la pantalla de carga y mostrar el proyecto
+    setLoaderClass(prevClass => `${prevClass} fade-out`)
+
+    setTimeout(() => {
+      setLoading(false)
+    }, 1000)
   }
 
   return (
     <div className='main-content'>
       {loading && (
-        <div className='loader2'>
+        <div className={loaderClass}>
           <img
             className='soil-logo'
             src='/images/soil_logo.png'
@@ -224,25 +287,27 @@ const BabylonScene = ({ modelPath }) => {
       <canvas
         ref={canvasRef}
         style={{
-          width: '100dvw',
-          height: '100dvh'
+          width: '100vw',
+          height: '100vh',
+          display: 'block',
+          touchAction: 'none' // Asegura que los gestos táctiles sean manejados correctamente
         }}
       />
       <div className='menubar2' style={{ display: loading ? 'none' : 'flex' }}>
-        <AnimatedButton onClick={rotateLeft}>
+        <AnimatedButton onMouseDown={rotateLeft}>
           <GlobalRotateIcon width='30px' height='30px' />
         </AnimatedButton>
-        <AnimatedButton onClick={rotateRight}>
+        <AnimatedButton onMouseDown={rotateRight}>
           <GlobalRotateIcon
             width='30px'
             height='30px'
             style={{ transform: 'scaleX(-1)' }}
           />
         </AnimatedButton>
-        <AnimatedButton onClick={zoomOut}>
+        <AnimatedButton onMouseDown={zoomOut}>
           <ZoomOutIcon width='30px' height='30px' />
         </AnimatedButton>
-        <AnimatedButton onClick={zoomIn}>
+        <AnimatedButton onMouseDown={zoomIn}>
           <ZoomInIcon width='30px' height='30px' />
         </AnimatedButton>
       </div>

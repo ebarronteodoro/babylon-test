@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Engine } from '@babylonjs/core/Engines/engine'
 import { Scene } from '@babylonjs/core/scene'
-import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera'
+
+// import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera'
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector'
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader'
@@ -17,6 +20,7 @@ import ZoomOutIcon from './icons/ZoomOutIcon'
 import GlobalRotateIcon from './icons/GlobalRotateIcon'
 import EyeIcon from './icons/EyeIcon'
 import AnimatedButton from './AnimatedButton'
+import { ActionManager, ExecuteCodeAction } from '@babylonjs/core';
 
 const BabylonScene = ({ modelPath }) => {
   const canvasRef = useRef(null)
@@ -46,21 +50,18 @@ const BabylonScene = ({ modelPath }) => {
     const scene = new Scene(engine)
     scene.clearColor = new Vector3(0, 0, 0)
 
-    const camera = new UniversalCamera(
+    const camera = new ArcRotateCamera(
       'camera',
-      new Vector3(0, 22, -radiusRef.current),
+      Math.PI / 4, // Alpha
+      Math.PI / 4, // Beta
+      100, // Radio
+      center,
       scene
-    )
-    camera.setTarget(center)
-    camera.inputs.clear()
-    cameraRef.current = camera
+    );
+    camera.attachControl(canvas, true); // Habilitar control táctil y del mouse
 
-    const hemiLight = new HemisphericLight(
-      'hemiLight',
-      new Vector3(1, 1, 0),
-      scene
-    )
-    hemiLight.intensity = 1.5
+    const hemiLight = new HemisphericLight('hemiLight', new Vector3(1, 1, 0), scene);
+    hemiLight.intensity = 1.5;
 
     const skybox = MeshBuilder.CreateBox('skyBox', { size: 1000 }, scene)
     const skyboxMaterial = new StandardMaterial('skyBoxMaterial', scene)
@@ -79,7 +80,14 @@ const BabylonScene = ({ modelPath }) => {
         scene => {
           const meshes = scene.meshes
           meshes.forEach(mesh => {
-            mesh.receiveShadows = true
+            mesh.receiveShadows = true;
+            mesh.actionManager = new ActionManager(scene);
+            mesh.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPickTrigger, ()=>{
+                console.log(`Clicked on: ${mesh.name}`);
+              })
+            )
+
           })
           scene.executeWhenReady(() => {
             setStatusMessage('Modelo cargado')
@@ -95,9 +103,9 @@ const BabylonScene = ({ modelPath }) => {
       console.error('Error en el callback de SceneLoader.Append:', error)
     }
 
-    scene.detachControl()
+    // scene.detachControl()
 
-    updateCameraPosition()
+    // updateCameraPosition()
 
     engine.runRenderLoop(() => {
       angleRef.current += (targetAngle.current - angleRef.current) * lerpSpeed
@@ -114,17 +122,17 @@ const BabylonScene = ({ modelPath }) => {
     // Añadir eventos de mouse y touch
     canvas.addEventListener('mousedown', handlePointerDown)
     canvas.addEventListener('wheel', handleMouseWheel, { passive: false })
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
-    canvas.addEventListener('touchend', handleTouchEnd)
+    // canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
+    // canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
+    // canvas.addEventListener('touchend', handleTouchEnd)
 
     return () => {
       engine.dispose()
       canvas.removeEventListener('mousedown', handlePointerDown)
       canvas.removeEventListener('wheel', handleMouseWheel)
-      canvas.removeEventListener('touchstart', handleTouchStart)
-      canvas.removeEventListener('touchmove', handleTouchMove)
-      canvas.removeEventListener('touchend', handleTouchEnd)
+      // canvas.removeEventListener('touchstart', handleTouchStart)
+      // canvas.removeEventListener('touchmove', handleTouchMove)
+      // canvas.removeEventListener('touchend', handleTouchEnd)
     }
   }, [modelPath])
 
@@ -151,8 +159,8 @@ const BabylonScene = ({ modelPath }) => {
     const newRadius = radiusRef.current
     const x = newRadius * Math.sin(newAngle)
     const z = newRadius * Math.cos(newAngle)
-    cameraRef.current.position = new Vector3(x, 30, z)
-    cameraRef.current.setTarget(center)
+    // cameraRef.current.position = new Vector3(x, 30, z)
+    // cameraRef.current.setTarget(center)
   }
 
   const rotateRight = () => {
